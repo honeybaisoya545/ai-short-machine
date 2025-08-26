@@ -96,16 +96,11 @@
         platform = "YouTube";
         icon = "📺";
         // Try to extract channel ID from common YouTube URL formats
-        // This is a simplified version, might not work for all edge cases
         try {
             const url = new URL(link);
             if (url.pathname.startsWith('/channel/')) {
                 channelId = url.pathname.split('/')[2];
             } else if (url.pathname.startsWith('/c/')) {
-                // Custom URL like youtube.com/c/ChannelName - harder to get ID directly
-                // For now, we'll store the URL and note we need the ID
-                // A full implementation would require an API call to resolve the custom URL
-                // For simplicity, we'll assume the user provides a direct channel URL
                  alert("Please provide a direct channel URL like https://www.youtube.com/channel/UC... for full functionality.");
             } else if (url.pathname.startsWith('/@')) {
                  alert("Please provide a direct channel URL like https://www.youtube.com/channel/UC... for full functionality.");
@@ -117,19 +112,16 @@
         }
         if (!channelId) {
              alert("Could not automatically extract Channel ID. Please ensure the link is a direct channel link (e.g., https://www.youtube.com/channel/UC...).");
-             return; // Don't add if we can't get the ID for YouTube
+             return;
         }
 
       } else if (link.includes("facebook.com")) {
         platform = "Facebook";
         icon = "📘";
-        // Facebook ID extraction is complex, might need API or scraping
-        // For now, we store the link but note limitations
          alert("Facebook channel checking might not work fully with just the link. Feature is limited.");
       } else if (link.includes("tiktok.com")) {
         platform = "TikTok";
         icon = "🎵";
-        // TikTok ID extraction is also complex
          alert("TikTok channel checking might not work fully with just the link. Feature is limited.");
       } else {
           alert("Unsupported platform or link format.");
@@ -140,14 +132,14 @@
         url: link,
         platform: platform,
         icon: icon,
-        id: channelId // Will be null for non-YouTube or if extraction failed
+        id: channelId
       };
 
       addedChannels.push(channelData);
 
       const list = document.getElementById("channelList");
       const li = document.createElement("li");
-      li.dataset.index = addedChannels.length - 1; // Store index for removal
+      li.dataset.index = addedChannels.length - 1;
       li.innerHTML = `
         <span class="channel-info"><strong>${icon} ${platform}</strong>: ${link.substring(0, 40)}${link.length > 40 ? '...' : ''}</span>
         <button class="remove-btn" onclick="removeChannel(${addedChannels.length - 1})">Remove</button>
@@ -159,14 +151,13 @@
     function removeChannel(index) {
         if (index >= 0 && index < addedChannels.length) {
             addedChannels.splice(index, 1);
-            // Re-render the list to keep indices correct
             renderChannelList();
         }
     }
 
     function renderChannelList() {
         const list = document.getElementById("channelList");
-        list.innerHTML = ""; // Clear list
+        list.innerHTML = "";
         addedChannels.forEach((channel, index) => {
              const li = document.createElement("li");
              li.dataset.index = index;
@@ -181,6 +172,9 @@
     // YouTube API Integration
     let isMachineOn = false;
     let youtubeApiKey = "AIzaSyCi1owTgpghGwR6a4sztcYNFXZg7EDNjos"; // Your real API key
+    // --- Configuration ---
+    const MIN_VIDEO_DURATION_SECONDS = 120; // Only process videos longer than 2 minutes
+    // ---------------------
 
     function toggleMachine() {
       isMachineOn = !isMachineOn;
@@ -189,7 +183,7 @@
       if (isMachineOn) {
         button.textContent = "AI Machine: ON";
         button.style.background = "#10b981";
-        startCheckingVideos(); // This will now check YOUR channels
+        startCheckingVideos();
       } else {
         button.textContent = "AI Machine: OFF";
         button.style.background = "#10b981";
@@ -204,14 +198,13 @@
           return;
       }
 
-      alert("🤖 AI Machine is now checking for new videos in your added channels...");
+      alert("🤖 AI Machine is now checking for new, long videos in your added channels...");
       
-      // Loop through added channels and check YouTube ones
       let foundYouTubeChannel = false;
       for (const channel of addedChannels) {
           if (channel.platform === "YouTube" && channel.id) {
               foundYouTubeChannel = true;
-              checkNewVideo(channel.id); // Check each added YouTube channel
+              checkNewVideo(channel.id);
           }
       }
 
@@ -220,7 +213,6 @@
       }
     }
 
-    // Smart Clip Processing Logic - Step 5.1
     function calculateShortsFromVideo(totalDuration, targetDuration = 65) {
       const fullClips = Math.floor(totalDuration / targetDuration);
       const leftoverTime = totalDuration % targetDuration;
@@ -244,7 +236,6 @@
       };
     }
 
-    // Helper function to convert ISO 8601 duration to seconds
     function parseISO8601Duration(duration) {
       const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
       const hours = parseInt(match[1]) || 0;
@@ -253,9 +244,8 @@
       return hours * 3600 + minutes * 60 + seconds;
     }
 
-    // Test function with a known video (10 minutes)
     function testWithSampleVideo() {
-      const sampleDuration = 600; // 10 minutes = 600 seconds
+      const sampleDuration = 600;
       const result = calculateShortsFromVideo(sampleDuration);
       
       alert(`🧪 Sample Video Test:
@@ -266,19 +256,16 @@ Last Short: ${result.lastClipDuration} seconds
 Leftover: ${result.leftoverTime} seconds`);
     }
 
-    // Enhanced Video Detection - Step 5.2 (Updated with cache bypass and channel ID)
+    // --- Updated checkNewVideo with duration filtering ---
     async function checkNewVideo(channelId) {
       try {
-        // Add a random timestamp to bypass cache
         const timestamp = Date.now();
 
-        // Get 3 most recent videos instead of just 1
         const response = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?order=date&part=snippet,id&channelId=${channelId}&maxResults=3&key=${youtubeApiKey}&timestamp=${timestamp}`
+          `https://www.googleapis.com/youtube/v3/search?order=date&part=snippet,id&channelId=${channelId}&maxResults=5&key=${youtubeApiKey}&timestamp=${timestamp}` // Increased maxResults to check more
         );
         const data = await response.json();
 
-        // Check for API errors first
         if (data.error) {
             console.error("YouTube API Error:", data.error);
             alert(`YouTube API Error for channel ${channelId}: ${data.error.message}`);
@@ -286,35 +273,40 @@ Leftover: ${result.leftoverTime} seconds`);
         }
         
         if (data.items && data.items.length > 0) {
-          let message = `🆕 Recent videos detected for channel ID ${channelId}:\n\n`;
-          
-          // Check first 3 videos
-          for(let i = 0; i < Math.min(3, data.items.length); i++) {
+          let message = `🆕 Recent long videos detected for channel ID ${channelId}:\n\n`;
+          let foundLongVideo = false; // Flag to track if we found any long videos
+
+          for(let i = 0; i < data.items.length; i++) { // Loop through all fetched items
             const video = data.items[i];
             const videoId = video.id.videoId;
             const title = video.snippet.title;
             
-            // Get video duration
             const durationResponse = await fetch(
               `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=contentDetails&key=${youtubeApiKey}&timestamp=${timestamp}`
             );
             const durationData = await durationResponse.json();
 
-             // Check for API errors in duration call
             if (durationData.error) {
                 console.error("YouTube API Error (Duration):", durationData.error);
                 message += `${i+1}. ${title} (Duration: Error fetching)\n\n`;
-                continue; // Skip this video if duration fetch fails
+                continue;
             }
             
             if (durationData.items && durationData.items.length > 0) {
               const durationISO = durationData.items[0].contentDetails.duration;
               const durationSeconds = parseISO8601Duration(durationISO);
+
+              // --- FILTER: Check if video is long enough ---
+              if (durationSeconds <= MIN_VIDEO_DURATION_SECONDS) {
+                  console.log(`Skipping short video (ID: ${videoId}, Duration: ${durationSeconds}s)`);
+                  continue; // Skip this video, check the next one
+              }
+              foundLongVideo = true; // We found at least one long video
+              // --- END FILTER ---
               
               const clipInfo = calculateShortsFromVideo(durationSeconds);
               
-              // Ask user if they want to process this video
-              const userChoice = confirm(`🆕 New video detected!
+              const userChoice = confirm(`🆕 New LONG video detected!
 Title: ${title}
 Duration: ${Math.floor(durationSeconds/60)}:${String(durationSeconds%60).padStart(2,'0')}
 Shorts Possible: ${clipInfo.totalShorts}
@@ -323,7 +315,7 @@ Click OK to process this video into shorts, Cancel to skip.`);
 
               if (userChoice) {
                 processVideoCompletely(videoId, title);
-                return; // Process only the first selected video for now, then stop checking this channel
+                return; // Process only the first selected video, then stop
               }
 
               message += `${i+1}. ${title}
@@ -334,26 +326,27 @@ Shorts: ${clipInfo.totalShorts} clips (${clipInfo.lastClipDuration}s last)
               message += `${i+1}. ${title} (Duration: N/A)\n\n`;
             }
           }
-          
-          // Only show list if no video was selected for processing
-          if (!message.includes("processVideoCompletely")) {
+
+          // --- Only alert if we found at least one long video ---
+          if (foundLongVideo && !message.includes("processVideoCompletely")) {
              alert(message);
+          } else if (!foundLongVideo){
+              console.log(`No long videos (>${MIN_VIDEO_DURATION_SECONDS}s) found for channel ID: ${channelId}`);
+              // Optional: Alert if no long videos found at all after checking
+              // alert(`No long videos found for channel ID: ${channelId}`);
           }
+          // --- END ---
         } else {
-          // It's okay if one channel has no videos, don't alert for every one
           console.log(`No recent videos found for channel ID: ${channelId}`);
-          // alert(`No recent videos found for channel ID: ${channelId}`); // Optional: less intrusive
         }
       } catch (error) {
         console.error("Error checking for videos for channel", channelId, ":", error);
         alert(`Error checking for videos for channel ${channelId}. Check console for details.`);
       }
     }
+    // --- End of updated function ---
 
 
-    // Step 6: Video Processing Functions
-
-    // Function to simulate video processing (since we can't do real processing in browser)
     function processVideoToShorts(videoId, duration, numberOfShorts) {
       alert(`🎬 Starting video processing...
       
@@ -364,7 +357,6 @@ Shorts to create: ${numberOfShorts}
 ⚠️ Note: Real video processing requires backend/server.
 This is a simulation for now.`);
 
-      // Simulate processing time
       setTimeout(() => {
         alert(`✅ Video processing complete!
         
@@ -374,7 +366,6 @@ Added automatic captions and basic effects.`);
       }, 3000);
     }
 
-    // Function to generate video editing links
     function getVideoEditingLinks(videoId) {
       const links = {
         "Online Video Cutter": `https://online-video-cutter.com/?url=https://youtube.com/watch?v=${videoId}`,
@@ -390,19 +381,15 @@ Added automatic captions and basic effects.`);
       return message;
     }
 
-    // Enhanced function to process a video completely
     async function processVideoCompletely(videoId, title) {
       try {
-        // Add a random timestamp to bypass cache
         const timestamp = Date.now();
 
-        // Get video duration
         const durationResponse = await fetch(
           `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=contentDetails&key=${youtubeApiKey}&timestamp=${timestamp}`
         );
         const durationData = await durationResponse.json();
 
-        // Check for API errors in duration call
         if (durationData.error) {
             console.error("YouTube API Error (Processing Duration):", durationData.error);
             alert(`Error fetching video duration: ${durationData.error.message}`);
@@ -429,10 +416,8 @@ Choose an option:
           const choice = confirm(result + "\n\nClick OK for Demo, Cancel for Editing Links");
           
           if (choice) {
-            // Simulate processing
             processVideoToShorts(videoId, durationSeconds, clipInfo.totalShorts);
           } else {
-            // Show editing tool links
             const links = getVideoEditingLinks(videoId);
             alert(links);
           }
