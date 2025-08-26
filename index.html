@@ -44,6 +44,18 @@
       border-radius: 8px;
       max-width: 600px;
       text-align: left;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .channel-info {
+      flex-grow: 1;
+    }
+    .remove-btn {
+      background: #ef4444;
+      padding: 5px 10px;
+      font-size: 14px;
+      margin: 0;
     }
   </style>
 </head>
@@ -63,29 +75,107 @@
   </div>
 
   <script>
+    // Store added channels in an array
+    let addedChannels = [];
+
     function addChannel() {
       const link = document.getElementById("channelLink").value.trim();
       if (!link) return alert("Please enter a link");
 
+      // Basic check to avoid duplicates (simple check)
+      if (addedChannels.some(c => c.url === link)) {
+          alert("This channel is already added.");
+          return;
+      }
+
       let platform = "Other";
       let icon = "🌐";
+      let channelId = null; // We'll try to extract this for YouTube
 
       if (link.includes("youtube.com") || link.includes("youtu.be")) {
         platform = "YouTube";
         icon = "📺";
+        // Try to extract channel ID from common YouTube URL formats
+        // This is a simplified version, might not work for all edge cases
+        try {
+            const url = new URL(link);
+            if (url.pathname.startsWith('/channel/')) {
+                channelId = url.pathname.split('/')[2];
+            } else if (url.pathname.startsWith('/c/')) {
+                // Custom URL like youtube.com/c/ChannelName - harder to get ID directly
+                // For now, we'll store the URL and note we need the ID
+                // A full implementation would require an API call to resolve the custom URL
+                // For simplicity, we'll assume the user provides a direct channel URL
+                 alert("Please provide a direct channel URL like https://www.youtube.com/channel/UC... for full functionality.");
+            } else if (url.pathname.startsWith('/@')) {
+                 alert("Please provide a direct channel URL like https://www.youtube.com/channel/UC... for full functionality.");
+            } else if (url.searchParams.has('channel')) {
+                 channelId = url.searchParams.get('channel');
+            }
+        } catch (e) {
+            console.error("Error parsing URL:", e);
+        }
+        if (!channelId) {
+             alert("Could not automatically extract Channel ID. Please ensure the link is a direct channel link (e.g., https://www.youtube.com/channel/UC...).");
+             return; // Don't add if we can't get the ID for YouTube
+        }
+
       } else if (link.includes("facebook.com")) {
         platform = "Facebook";
         icon = "📘";
+        // Facebook ID extraction is complex, might need API or scraping
+        // For now, we store the link but note limitations
+         alert("Facebook channel checking might not work fully with just the link. Feature is limited.");
       } else if (link.includes("tiktok.com")) {
         platform = "TikTok";
         icon = "🎵";
+        // TikTok ID extraction is also complex
+         alert("TikTok channel checking might not work fully with just the link. Feature is limited.");
+      } else {
+          alert("Unsupported platform or link format.");
+          return;
       }
+
+      const channelData = {
+        url: link,
+        platform: platform,
+        icon: icon,
+        id: channelId // Will be null for non-YouTube or if extraction failed
+      };
+
+      addedChannels.push(channelData);
 
       const list = document.getElementById("channelList");
       const li = document.createElement("li");
-      li.innerHTML = `<strong>${icon} ${platform}</strong>: ${link.substring(0, 40)}...`;
+      li.dataset.index = addedChannels.length - 1; // Store index for removal
+      li.innerHTML = `
+        <span class="channel-info"><strong>${icon} ${platform}</strong>: ${link.substring(0, 40)}${link.length > 40 ? '...' : ''}</span>
+        <button class="remove-btn" onclick="removeChannel(${addedChannels.length - 1})">Remove</button>
+      `;
       list.appendChild(li);
       document.getElementById("channelLink").value = "";
+    }
+
+    function removeChannel(index) {
+        if (index >= 0 && index < addedChannels.length) {
+            addedChannels.splice(index, 1);
+            // Re-render the list to keep indices correct
+            renderChannelList();
+        }
+    }
+
+    function renderChannelList() {
+        const list = document.getElementById("channelList");
+        list.innerHTML = ""; // Clear list
+        addedChannels.forEach((channel, index) => {
+             const li = document.createElement("li");
+             li.dataset.index = index;
+             li.innerHTML = `
+               <span class="channel-info"><strong>${channel.icon} ${channel.platform}</strong>: ${channel.url.substring(0, 40)}${channel.url.length > 40 ? '...' : ''}</span>
+               <button class="remove-btn" onclick="removeChannel(${index})">Remove</button>
+             `;
+             list.appendChild(li);
+        });
     }
 
     // YouTube API Integration
@@ -99,7 +189,7 @@
       if (isMachineOn) {
         button.textContent = "AI Machine: ON";
         button.style.background = "#10b981";
-        startCheckingVideos();
+        startCheckingVideos(); // This will now check YOUR channels
       } else {
         button.textContent = "AI Machine: OFF";
         button.style.background = "#10b981";
@@ -109,10 +199,25 @@
     function startCheckingVideos() {
       if (!isMachineOn) return;
       
-      alert("🤖 AI Machine is now checking for new videos...");
+      if (addedChannels.length === 0) {
+          alert("🤖 AI Machine is ON, but you haven't added any channels yet.");
+          return;
+      }
+
+      alert("🤖 AI Machine is now checking for new videos in your added channels...");
       
-      // Example: Check CarryMinati's channel
-      checkNewVideo("UCXRlZiA3R9cFv6au5Tq78Rw");
+      // Loop through added channels and check YouTube ones
+      let foundYouTubeChannel = false;
+      for (const channel of addedChannels) {
+          if (channel.platform === "YouTube" && channel.id) {
+              foundYouTubeChannel = true;
+              checkNewVideo(channel.id); // Check each added YouTube channel
+          }
+      }
+
+      if (!foundYouTubeChannel) {
+          alert("No valid YouTube channels found to check. Please add YouTube channels with direct /channel/ URLs.");
+      }
     }
 
     // Smart Clip Processing Logic - Step 5.1
@@ -161,7 +266,7 @@ Last Short: ${result.lastClipDuration} seconds
 Leftover: ${result.leftoverTime} seconds`);
     }
 
-    // Enhanced Video Detection - Step 5.2 (Updated with cache bypass)
+    // Enhanced Video Detection - Step 5.2 (Updated with cache bypass and channel ID)
     async function checkNewVideo(channelId) {
       try {
         // Add a random timestamp to bypass cache
@@ -169,12 +274,19 @@ Leftover: ${result.leftoverTime} seconds`);
 
         // Get 3 most recent videos instead of just 1
         const response = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?order=date&part=snippet,id&channelId=${channelId}&maxResults=3&key=${youtubeApiKey}&timestamp=${timestamp}` // <-- Timestamp added here
+          `https://www.googleapis.com/youtube/v3/search?order=date&part=snippet,id&channelId=${channelId}&maxResults=3&key=${youtubeApiKey}&timestamp=${timestamp}`
         );
         const data = await response.json();
+
+        // Check for API errors first
+        if (data.error) {
+            console.error("YouTube API Error:", data.error);
+            alert(`YouTube API Error for channel ${channelId}: ${data.error.message}`);
+            return;
+        }
         
         if (data.items && data.items.length > 0) {
-          let message = "🆕 Recent videos detected:\n\n";
+          let message = `🆕 Recent videos detected for channel ID ${channelId}:\n\n`;
           
           // Check first 3 videos
           for(let i = 0; i < Math.min(3, data.items.length); i++) {
@@ -184,9 +296,16 @@ Leftover: ${result.leftoverTime} seconds`);
             
             // Get video duration
             const durationResponse = await fetch(
-              `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=contentDetails&key=${youtubeApiKey}&timestamp=${timestamp}` // <-- Timestamp added here too
+              `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=contentDetails&key=${youtubeApiKey}&timestamp=${timestamp}`
             );
             const durationData = await durationResponse.json();
+
+             // Check for API errors in duration call
+            if (durationData.error) {
+                console.error("YouTube API Error (Duration):", durationData.error);
+                message += `${i+1}. ${title} (Duration: Error fetching)\n\n`;
+                continue; // Skip this video if duration fetch fails
+            }
             
             if (durationData.items && durationData.items.length > 0) {
               const durationISO = durationData.items[0].contentDetails.duration;
@@ -204,7 +323,7 @@ Click OK to process this video into shorts, Cancel to skip.`);
 
               if (userChoice) {
                 processVideoCompletely(videoId, title);
-                break; // Process only the first selected video for now
+                return; // Process only the first selected video for now, then stop checking this channel
               }
 
               message += `${i+1}. ${title}
@@ -221,11 +340,13 @@ Shorts: ${clipInfo.totalShorts} clips (${clipInfo.lastClipDuration}s last)
              alert(message);
           }
         } else {
-          alert("No recent videos found.");
+          // It's okay if one channel has no videos, don't alert for every one
+          console.log(`No recent videos found for channel ID: ${channelId}`);
+          // alert(`No recent videos found for channel ID: ${channelId}`); // Optional: less intrusive
         }
       } catch (error) {
-        alert("Error checking for videos. Make sure API key is correct.");
-        console.error(error); // Added for debugging
+        console.error("Error checking for videos for channel", channelId, ":", error);
+        alert(`Error checking for videos for channel ${channelId}. Check console for details.`);
       }
     }
 
@@ -277,9 +398,16 @@ Added automatic captions and basic effects.`);
 
         // Get video duration
         const durationResponse = await fetch(
-          `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=contentDetails&key=${youtubeApiKey}&timestamp=${timestamp}` // <-- Timestamp added here too
+          `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=contentDetails&key=${youtubeApiKey}&timestamp=${timestamp}`
         );
         const durationData = await durationResponse.json();
+
+        // Check for API errors in duration call
+        if (durationData.error) {
+            console.error("YouTube API Error (Processing Duration):", durationData.error);
+            alert(`Error fetching video duration: ${durationData.error.message}`);
+            return;
+        }
         
         if (durationData.items && durationData.items.length > 0) {
           const durationISO = durationData.items[0].contentDetails.duration;
@@ -308,10 +436,12 @@ Choose an option:
             const links = getVideoEditingLinks(videoId);
             alert(links);
           }
+        } else {
+             alert("Could not retrieve video details for processing.");
         }
       } catch (error) {
-        alert("Error processing video: " + error.message);
-        console.error(error); // Added for debugging
+        console.error("Error processing video:", error);
+        alert("Error processing video. Check console for details.");
       }
     }
   </script>
