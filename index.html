@@ -139,6 +139,28 @@
       };
     }
 
+    // Helper function to convert ISO 8601 duration to seconds
+    function parseISO8601Duration(duration) {
+      const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      const hours = parseInt(match[1]) || 0;
+      const minutes = parseInt(match[2]) || 0;
+      const seconds = parseInt(match[3]) || 0;
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+
+    // Test function with a known video (10 minutes)
+    function testWithSampleVideo() {
+      const sampleDuration = 600; // 10 minutes = 600 seconds
+      const result = calculateShortsFromVideo(sampleDuration);
+      
+      alert(`🧪 Sample Video Test:
+Duration: 10:00 (600 seconds)
+Target Short: 65 seconds
+Full Shorts: ${result.totalShorts}
+Last Short: ${result.lastClipDuration} seconds
+Leftover: ${result.leftoverTime} seconds`);
+    }
+
     // Enhanced Video Detection - Step 5.2
     async function checkNewVideo(channelId) {
       try {
@@ -169,6 +191,19 @@
               
               const clipInfo = calculateShortsFromVideo(durationSeconds);
               
+              // Ask user if they want to process this video
+              const userChoice = confirm(`🆕 New video detected!
+Title: ${title}
+Duration: ${Math.floor(durationSeconds/60)}:${String(durationSeconds%60).padStart(2,'0')}
+Shorts Possible: ${clipInfo.totalShorts}
+
+Click OK to process this video into shorts, Cancel to skip.`);
+
+              if (userChoice) {
+                processVideoCompletely(videoId, title);
+                break; // Process only the first selected video for now
+              }
+
               message += `${i+1}. ${title}
 Duration: ${Math.floor(durationSeconds/60)}:${String(durationSeconds%60).padStart(2,'0')}
 Shorts: ${clipInfo.totalShorts} clips (${clipInfo.lastClipDuration}s last)
@@ -178,7 +213,10 @@ Shorts: ${clipInfo.totalShorts} clips (${clipInfo.lastClipDuration}s last)
             }
           }
           
-          alert(message);
+          // Only show list if no video was selected for processing
+          if (!message.includes("processVideoCompletely")) {
+             alert(message);
+          }
         } else {
           alert("No recent videos found.");
         }
@@ -187,26 +225,86 @@ Shorts: ${clipInfo.totalShorts} clips (${clipInfo.lastClipDuration}s last)
       }
     }
 
-    // Helper function to convert ISO 8601 duration to seconds
-    function parseISO8601Duration(duration) {
-      const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-      const hours = parseInt(match[1]) || 0;
-      const minutes = parseInt(match[2]) || 0;
-      const seconds = parseInt(match[3]) || 0;
-      return hours * 3600 + minutes * 60 + seconds;
+
+    // Step 6: Video Processing Functions
+
+    // Function to simulate video processing (since we can't do real processing in browser)
+    function processVideoToShorts(videoId, duration, numberOfShorts) {
+      alert(`🎬 Starting video processing...
+      
+Video ID: ${videoId}
+Duration: ${duration} seconds
+Shorts to create: ${numberOfShorts}
+
+⚠️ Note: Real video processing requires backend/server.
+This is a simulation for now.`);
+
+      // Simulate processing time
+      setTimeout(() => {
+        alert(`✅ Video processing complete!
+        
+Created ${numberOfShorts} shorts from video.
+Each short is 65 seconds long (9:16 ratio).
+Added automatic captions and basic effects.`);
+      }, 3000);
     }
 
-    // Test function with a known video (10 minutes)
-    function testWithSampleVideo() {
-      const sampleDuration = 600; // 10 minutes = 600 seconds
-      const result = calculateShortsFromVideo(sampleDuration);
+    // Function to generate video editing links
+    function getVideoEditingLinks(videoId) {
+      const links = {
+        "Online Video Cutter": `https://online-video-cutter.com/?url=https://youtube.com/watch?v=${videoId}`,
+        "Clideo": `https://clideo.com/cut-video?url=https://youtube.com/watch?v=${videoId}`,
+        "VidLouder": `https://www.vidlouder.com/video-editor/?url=https://youtube.com/watch?v=${videoId}`
+      };
       
-      alert(`🧪 Sample Video Test:
-Duration: 10:00 (600 seconds)
-Target Short: 65 seconds
-Full Shorts: ${result.totalShorts}
-Last Short: ${result.lastClipDuration} seconds
-Leftover: ${result.leftoverTime} seconds`);
+      let message = "🔧 Video Editing Tools:\n\n";
+      for (const [name, url] of Object.entries(links)) {
+        message += `${name}: ${url}\n\n`;
+      }
+      
+      return message;
+    }
+
+    // Enhanced function to process a video completely
+    async function processVideoCompletely(videoId, title) {
+      try {
+        // Get video duration
+        const durationResponse = await fetch(
+          `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=contentDetails&key=${youtubeApiKey}`
+        );
+        const durationData = await durationResponse.json();
+        
+        if (durationData.items && durationData.items.length > 0) {
+          const durationISO = durationData.items[0].contentDetails.duration;
+          const durationSeconds = parseISO8601Duration(durationISO);
+          
+          const clipInfo = calculateShortsFromVideo(durationSeconds);
+          
+          const result = `📹 Video Processing Ready:
+Title: ${title}
+Duration: ${Math.floor(durationSeconds/60)}:${String(durationSeconds%60).padStart(2,'0')}
+Shorts: ${clipInfo.totalShorts} clips
+Last Clip: ${clipInfo.lastClipDuration} seconds
+
+Choose an option:
+1. Simulate Processing (Demo)
+2. Get Editing Tool Links
+3. Cancel`;
+
+          const choice = confirm(result + "\n\nClick OK for Demo, Cancel for Editing Links");
+          
+          if (choice) {
+            // Simulate processing
+            processVideoToShorts(videoId, durationSeconds, clipInfo.totalShorts);
+          } else {
+            // Show editing tool links
+            const links = getVideoEditingLinks(videoId);
+            alert(links);
+          }
+        }
+      } catch (error) {
+        alert("Error processing video: " + error.message);
+      }
     }
   </script>
 </body>
